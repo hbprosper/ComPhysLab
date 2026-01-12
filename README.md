@@ -1,5 +1,8 @@
 # Computational Physics Laboratory
-Welcome to the Computational Physics Laboratory course GitHub repository at Florida State University. In the spirit of open source this website is open to anyone. The computational physics course is designed for incoming physics majors. The premise of the course is that instructive physics investigations can be undertaken by dedicated students even if they have barely begun their formal university physics education. For example, a student who has made the effort to master an algorithm for numerically solving a set of coupled 1st-order ordinary differential equations (ODE) is fully equipped to investigate many interesting physical systems. The course assumes that you have a good command of high school algebra and trignometry, but not much else! But if you work through the examples and exercises diligently, you'll be able to solve problems from the relatively banal, projectile motion with friction, to the exotic, computing the orbits of photons around a black hole! This is very much a hands-on course...so don't be afraid to get your hands dirty.
+
+**WARNING**: This repo is being updated! It will be ready for download by January 20, 2026.
+
+Welcome to the GitHub repository of the introductory Computational Physics Laboratory course at Florida State University. In the spirit of open source this website is open to anyone. The computational physics course is designed for incoming physics majors. The premise of the course is that instructive physics investigations can be undertaken by dedicated students even if they have barely begun their formal university physics education. For example, a student who has made the effort to master an algorithm for numerically solving a set of coupled 1st-order ordinary differential equations (ODE) is fully equipped to investigate many interesting physical systems. The course assumes that you have a good command of high school algebra and trignometry, but not much else! But if you work through the examples and exercises diligently, you'll be able to solve problems from the relatively banal, projectile motion with friction, to the exotic, computing the orbits of photons around a black hole! This is very much a hands-on course...so don't be afraid to get your hands dirty.
 
 ## Introduction
 The notebooks in this repository depend on several well-known Python
@@ -41,14 +44,14 @@ I recommend installing __miniconda3__, a slimmed down version of Anaconda, which
 Software release systems such as Anaconda (__conda__ for short) make
 it possible to have several separate self-consistent named software
 *environments* on a single machine. For example, you
-may need to use Python 3.7.5 and an associated set of compatible
-Python software and at other times you may need to use Python 3.9.13 with
+may need to use Python 3.10.9 and an associated set of compatible
+Python software and at other times you may need to use Python 3.12.4 with
 software that requires that version of Python.  If you install software without using *environments* there is
 the danger that the software on your machine will eventually become
 inconsistent. Anaconda and its lightweight companion miniconda, and other software environment systems,
-provide a way, for example, to have a software *environment* on your machine that is
-consistent with Python 3.7.5 and another that is consistent with
-Python 3.9.13.  
+provide a way to create different self-consistent software environments on your machine, for example, one 
+consistent with Python 3.10.9 and another that is consistent with
+Python 3.12.4.  
 
 Of course, like anything humans make, Anaconda or miniconda3 is not
 perfect. There are times when the only solution is to remove an
@@ -56,7 +59,7 @@ environment using
 ```bash
 conda env remove -n <name>
 ```
-where \<name\> is the name of the environment and rebuild it by reinstalling the desired Python modules. Therefore, I recommend that you make a note of all the modules/packages you have installed and the order in which you installed.
+where \<name\> is the name of the environment and rebuild it by reinstalling the desired Python modules. Therefore, I recommend that you make a note of all the modules/packages you have installed and the order in which you installed them.
 
 In this course we shall be using the __Linux__ operating system. Therefore, the instructions below assume you are working within a __Terminal__ window on a Linux or Linux-like system such as Mac OSX.
 
@@ -100,13 +103,15 @@ If time permits, you'll be introduced to the basics of machine learning-based ar
 ```
 
 #### Step 4
-The command __git__ is needed to download the __CompPhysLab__ package from GitHub. If __git__ is not on your machine, it can be installed using the command
+The command __git__ is needed to download the __ComPhysLab__ package from GitHub. If __git__ is not on your machine, it can be installed using the command
 ```bash
 	conda install –c conda-forge git
 ```
-To install __CompPhysLab__, whether on your laptop, or on your classroom RCC virtual desktop, do
+To install __ComPhysLab__, whether on your laptop, or on your classroom RCC virtual desktop and the associated Python model `comphyslab`, do
 ```bash
   	cd 
-	git clone https://github.com/hbprosper/CompPhysLab
+	git clone https://github.com/hbprosper/ComPhysLab
+	cd ComPhysLab
+	pip install -e .
 ```
-This should clone, that is, replicate, a directory (aka folder) in your home directory called __CompPhysLab__. That folder will contain all of the examples and exercises we shall work through during the semester.
+This should clone, that is, replicate, a directory (aka folder) in your home directory called __ComPhysLab__ and then install the Python module `comphyslab`. That folder **ComPhysLab** contains all of the examples and exercises we shall work through during the semester.
