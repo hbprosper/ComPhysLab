@@ -151,6 +151,10 @@ def compute_grav_forces(m, r):
     
     return fnet
 # ----------------------------------------------------------------------
+class Missing:
+    pass
+MISSING = Missing()
+
 class Solver:
     '''
     
@@ -173,11 +177,11 @@ class Solver:
         self.h  = h           # time step
         self.hh = h**2
         
-    def compute(self, r, v=None):
+    def compute(self, r, v=MISSING):
         
         h, hh, m, forces = self.h, self.hh, self.m, self.forces
     
-        if v is not None:
+        if v is not MISSING:
             
             # use less precise formula at t = 0
             
