@@ -19,32 +19,29 @@ mp.rc('text', usetex=shutil.which('latex') is not None)
 # use JavaScript for rendering animations
 mp.rc('animation', html='jshtml')
 # ---------------------------------------------------------------------
-TRAIL = True       # add a trail to ball
-TRAIL_COUNT = 300  # maximum trail length attached to ball
-
 # in vpython, RGB colors must be defined using the vpython vector class
 SKYBLUE   = vp.vector(0.62,0.57,0.98)
 LAWNGREEN = vp.vector(0.50,0.90,0.50)
 GRAY      = vp.vector(0.70,0.70,0.70)
 
-WIDTH  = 550 # viewport width in pixels
-HEIGHT = 350 # viewport height in pixels
+WIDTH  = 600 # viewport width in pixels
+HEIGHT = 300 # viewport height in pixels
 
 ORIGIN = vp.vector(0,0,0)
 I      = vp.vector(1,0,0) # unit vector in x direction
 J      = vp.vector(0,1,0) # unit vector in y direction
 K      = vp.vector(0,0,1) # unit vector in z direction
-CAMERA = vp.vector(-1, -0.5, -0.8) # direction in which camera points
+CAMERA = vp.vector(-0.1, -0.5, -0.8).norm() # direction in which camera points
 # ---------------------------------------------------------------------
 def create_canvas(caption, size):
     scene = vp.canvas()
-    scene.caption= caption
-    scene.range  = size      # window size in world coordinates
+    scene.caption = caption
+    scene.range = size      # window size in world coordinates
     scene.width = WIDTH
     scene.height= HEIGHT
     scene.background=SKYBLUE
-    scene.userzoom  = False  # user can't zoom
-    scene.up     = J         # direction of vertical
+    scene.userzoom = False  # user can't zoom
+    scene.up = J             # direction of vertical
     scene.forward= CAMERA    # direction in which camera looks
     return scene
     
@@ -53,15 +50,14 @@ def draw_coordinate_system(size):
         pass
     axes = Axes()
 
-    size = 0.9 * size
-    sw = size/100/2
-    aw = 1.1*size/2
+    sw = size/80
+    aw = size/2
     
     # draw ground
-    a = vp.vertex( pos= size*I+size*K, color=LAWNGREEN, opacity=0.4)
-    b = vp.vertex( pos= size*I-size*K, color=LAWNGREEN, opacity=0.4)
-    c = vp.vertex( pos=-size*I-size*K, color=LAWNGREEN, opacity=0.4)
-    d = vp.vertex( pos=-size*I+size*K, color=LAWNGREEN, opacity=0.4)
+    a = vp.vertex( pos= size*I+size*K, color=LAWNGREEN, opacity=0.5)
+    b = vp.vertex( pos= size*I-size*K, color=LAWNGREEN, opacity=0.5)
+    c = vp.vertex( pos=-size*I-size*K, color=LAWNGREEN, opacity=0.5)
+    d = vp.vertex( pos=-size*I+size*K, color=LAWNGREEN, opacity=0.5)
     axes.xzplane = vp.quad(vs=[a, b, c, d])
     
     # draw Cartesian axes 

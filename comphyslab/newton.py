@@ -9,7 +9,7 @@ import matplotlib as mp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-from comphyslab.graphics import plot_central_axes
+from comphyslab.graphics import plot_central_xy_axes
 from comphyslab.vectors import magnitude, norm
 
 # update fonts
@@ -30,6 +30,8 @@ mp.rc('animation', html='jshtml')
 # ----------------------------------------------------------------------
 # CONSTANTS
 # ----------------------------------------------------------------------
+G = 6.674080e-11               # Gravitational constant (m^3 /kg /s^2)
+
 Msun     = 1.98850e30          # Mass of Sun (kg)
 Mmercury = 0.33010e24          # Mass of Mercury (kg)
 Mvenus   = 4.86730e24          # Mass of Venus (kg)
@@ -37,7 +39,8 @@ Mearth   = 5.97220e24          # Mass of Earth (kg)
 Mmars    = 0.64169e24          # Mass of Mars (kg)
 Mjupiter = 1898.13e24          # Mass of Jupiter (kg)
 
-G = 6.674080e-11               # Gravitational constant (m^3 /kg /s^2)
+Rsun     = 6.957e8             # Radius of Sun (m)
+Rearth   = 6.371e6             # Radius of Earth (m)
 
 # Conversion factors
 DAY2SECS = 24*3600.0          # Seconds per Earth day
@@ -230,7 +233,7 @@ def plot_planet_positions(x, y, colors, text,
     nxticks = nyticks = 9
     xlabel  = '$x$ (au)'
     ylabel  = '$y$ (au)'
-    plot_central_axes(ax, 
+    plot_central_xy_axes(ax, 
                       xmin, xmax, nxticks, xlabel,
                       ymin, ymax, nyticks, ylabel, 
                       ftsize)
