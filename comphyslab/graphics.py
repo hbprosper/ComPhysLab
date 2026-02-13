@@ -4,6 +4,8 @@ import vpython as vp
 import matplotlib as mp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from types import SimpleNamespace as NS
+from time import sleep
 # ---------------------------------------------------------------------
 # update fonts
 FONTSIZE = 12
@@ -19,6 +21,8 @@ mp.rc('text', usetex=shutil.which('latex') is not None)
 # use JavaScript for rendering animations
 mp.rc('animation', html='jshtml')
 # ---------------------------------------------------------------------
+# CONSTANTS
+# ---------------------------------------------------------------------
 # in vpython, RGB colors must be defined using the vpython vector class
 SKYBLUE   = vp.vector(0.62,0.57,0.98)
 LAWNGREEN = vp.vector(0.50,0.90,0.50)
@@ -31,25 +35,41 @@ ORIGIN = vp.vector(0,0,0)
 I      = vp.vector(1,0,0) # unit vector in x direction
 J      = vp.vector(0,1,0) # unit vector in y direction
 K      = vp.vector(0,0,1) # unit vector in z direction
-CAMERA = vp.vector(-0.1, -0.5, -0.8).norm() # direction in which camera points
+CAMERA = vp.vector(3,5,10).norm() # Camera position (to be scaled)
+# ---------------------------------------------------------------------
+# FUNCTIONS
 # ---------------------------------------------------------------------
 def create_canvas(caption, size):
     scene = vp.canvas()
     scene.caption = caption
-    scene.range = size      # window size in world coordinates
+    #scene.range = size      # visible size in world coordinates [-size, size]
     scene.width = WIDTH
     scene.height= HEIGHT
     scene.background=SKYBLUE
-    scene.userzoom = False  # user can't zoom
-    scene.up = J             # direction of vertical
-    scene.forward= CAMERA    # direction in which camera looks
+    scene.userzoom = False            # disable vpython zoom; do our own
+    scene.up = J                      # direction of vertical
+    
+    r_camera = 2 * size * CAMERA
+    scene.camera.axis =-r_camera
+    scene.camera.pos  = r_camera
+    scene.camera.dist = r_camera.mag
     return scene
     
-def draw_coordinate_system(size):
-    class Axes:
-        pass
-    axes = Axes()
+# Implement zoom explicitly
+def create_zoom(scene):
+    def zoom_callback(s):
+        distance = scene.camera.dist / s.value
+        scene.camera.pos = distance * vp.norm(scene.camera.pos-scene.center)
 
+    dist = scene.camera.dist
+    scene.append_to_title('\nZoom ')
+    zoom = vp.slider(min=0.5, max=2, value=1.0, 
+                     pos=scene.title_anchor,
+                           length=0.7*scene.width, bind=zoom_callback)
+    return zoom
+
+def draw_coordinate_system(size):
+    axes = NS()
     sw = size/80
     aw = size/2
     
@@ -71,22 +91,6 @@ def draw_coordinate_system(size):
     axes.zlabel= vp.label(pos=aw*K, text='z', box=False) 
 
     return axes
-
-class Controls:
-    def __init__(self, cfg):
-        self.cfg = cfg
-        
-    def start_pause(self, b):
-        self.cfg.update = not self.cfg.update
-        if self.cfg.update:
-            b.text='Pause'
-            b.background=vp.color.white
-        else:
-            b.text='Start'
-            b.background=vp.color.green
-
-    def stop(self, b):
-        self.cfg.active =False
 
 def plot_central_xy_axes(ax, 
                          xmin, xmax, nxticks, xlabel,
@@ -122,3 +126,94 @@ def plot_central_xy_axes(ax,
     # eliminate upper and right axes
     ax.spines['right'].set_color('none')
     ax.spines['top'].set_color('none')
+
+# ---------------------------------------------------------------------
+# CLASSES
+# ---------------------------------------------------------------------
+# Simple class to store state and widgets
+class Bag(NS):
+    def __init__(self):
+        super().__init__()
+        self.gfx = NS() # widgets stored in this "bag"
+        
+    def clear(self):
+        # clear all references to rendered 3D objects.
+        self.gfx.__dict__.clear()
+        
+class Sim:
+    def __init__(self, context, update, 
+                 stopped_message='Animation ended!', 
+                 wait_before_delete=3):
+
+        # verify context
+        try:
+            y = context.active
+        except:
+            context.active = True
+            print('''
+    Attribute "active" missing from "bag"! It has been added
+    and set to True. 
+            ''')
+            
+        try:
+            y = context.update
+        except:
+            context.update = True
+            print('''
+    Attribute "update" missing from bag! It has been added and 
+    set to True.
+            ''')
+
+        try:
+            y = context.rate
+        except:
+            context.rate = 50
+            print('''
+    Attribute "rate" missing from bag! It has been added and
+    set so that the frame rate is no greater than 50 frames / second.
+            ''')
+            
+        self.context = context
+        self.update  = update
+        self.message = stopped_message
+        self.wait_before_delete = wait_before_delete
+        
+    def run(self):
+        
+        while self.context.active:
+            
+            if self.context.update:
+                self.update(self.context)
+                
+            vp.rate(self.context.rate)
+
+        print(self.message)
+        sleep(self.wait_before_delete)
+        
+        self.context.gfx.scene.delete() # free all graphics objects
+        self.context.clear()            # free all Python references to graphics objects
+        
+class Controls:
+    def __init__(self, context):
+        self.context = context
+        
+    def start_pause(self, b):
+        self.context.update = not self.context.update
+        if self.context.update:
+            b.text='Pause'
+            b.background=vp.color.white
+        else:
+            b.text='Start'
+            b.background=vp.color.green
+
+    def stop(self, b):
+        self.context.active = False
+        b.text='Stop'
+        b.background=vp.color.white
+
+    def recenter(self, b):
+        scene = self.context.gfx.scene
+        r_camera = scene.camera.dist * CAMERA
+        scene.camera.axis =-r_camera
+        scene.camera.pos  = r_camera
+       
