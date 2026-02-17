@@ -99,10 +99,93 @@ def compute_grav_forces1(m, r):
     return np.array(f)
 # ----------------------------------------------------------------------
 # Given the masses m and positions r of the objects (planets, etc.), 
-# compute the net gravitational force on each object, this time using 
-# the numpy broadcasting mechanism. 
+# compute the net force on each object, using the numpy broadcasting 
+# mechanism. 
 # ----------------------------------------------------------------------
+def compute_forces(k, q, r, m, law=lambda x: 1/x**2):
+    '''
+    k (float)            Field strength. For electric fields this is 
+                         the electric constant. For gravity k = -G.
+                         
+    q (array floats)     Charges. For electric fields this is an array
+                         of electric charges. For gravity this is an
+                         array of masses.
+                         
+    r (array of vectors) Position vectors, where each position vector is
+                         modeled as a numpy array of shape (3,).
+                         
+    m (array of masses)
+
+    law(x)               Function that compute force law [default 1/x**2]
+    '''
+    # Initial shapes of arrays q (charges) and r (position vectors) for
+    # n particles
+    # q.shape: (n, )
+    # r.shape: (n, 3)
+    # m.shape: (n, )
+    
+    ri = r[np.newaxis, :]    # change shape from (n, 3) to (1, n, 3)
+    rj = r[:, np.newaxis]    # change shape from (n, 3) to (n, 1, 3)
+    
+    # Compute all possible vector differences using broadcasting
+    # ----------------------------------------------------------
+    # 1. The row (1, n, 3) with n columns, each element of which 
+    #    is a vector, is replicated vertically n times to form 
+    #    an array of shape (n, n, 3)
+    #
+    # 2. The column (n, 1, 3) with n rows, each element of which 
+    #    is a vector, is replicated horizontally n times to form
+    #    an array of shape (n, n, 3).
+    #
+    # 3. Now that we have arrays of the same shape, we can perform 
+    #    element-by-element subtractions.
+    #
+    # Note: the vectors along the diagonal are all zero-length vectors!
+    #       so self-interactions will be zero provided that we take
+    #       care not to divide by zero.
+    rij = ri - rj                         # shape: (n, n, 3)
+     
+    # rij_mag has shape (n, n) 
+    rij_mag = magnitude(rij)              # shape: (n, n)
+    
+    # To avoid divide by zero for the terms with i=j,
+    # replace the zeros along the diagonal with ones. 
+    np.fill_diagonal(rij_mag, 1)
+        
+    # Why must we change the shape of the magnitudes array?
+    rij_mag = rij_mag[:, :, np.newaxis]   # change shape to (n, n, 1)
+
+    # As noted above, the self-interaction of particle "i" with itself 
+    # is zero because the vector rij = 0 when i=j. 
+    # Note: when i=j we have set rij_mag = 1.
+    rij_hat = rij / rij_mag               # compute unit vectors
+    pij = rij_hat * law(rij_mag)
+      
+    # Why must we change the shape of the charge array?
+    # change shape from (n, ) to (n, 1, 1)
+    qj = q[:, np.newaxis, np.newaxis] 
+    
+    # Compute the field of every particle j at the location 
+    # of particle "i"
+    Ei = k * qj * pij  # (n, 1, 1) x (n, n, 3) => (n, n, 3)
+    
+    # Compute the net field at the location of particle "i" by
+    # summing the fields due to all other particles. Since the
+    # particles are listed row-by-row, we must sum along axis 0, 
+    # that is, "vertically".
+    Ei = Ei.sum(axis=0)
+    
+    # Compute the net force per unit mass f = q E / m, acting 
+    # on each particle
+    qi = q[:, np.newaxis] # shape (n, 1)
+    mi = m[:, np.newaxis] # shape (n, 1)
+    a  = qi * Ei / mi     # shape: (n, 3)
+    return a
+
 def compute_grav_forces(m, r):
+    return compute_forces(-G, m, r, m)
+    
+def compute_grav_forces2(m, r):
     
     # initial shapes of arrays m (masses) and r (position vectors)
     # m.shape: (n, )
@@ -192,7 +275,7 @@ class Solver:
             F  = forces(m, r)
             
             # broadcast the mass over the vector components 
-	    # (see description below)
+    	    # (see description below)
             Fm = F / m[:, np.newaxis]
             
             rnew = r + v * h + Fm * hh /  2   # O(h^3) accuracy

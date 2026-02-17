@@ -67,45 +67,42 @@ def tangent(u, n):
     Arguments
     ---------
     u:    unit vector in direction of incident a ray (or an numpy array 
-	  of unit vectors)
+	      of unit vectors)
     n:    unit normal to boundary (or an numpy array of unit normals)
     
     Return
     ------
     nt:   unit vector in direction of tangent to normal (or a numpy 
-	  array thereof)
+	      array thereof)
     
     Example
     -------
     
     nt = tangent(u, n)
-
     '''
     return norm(np.cross(n, np.cross(u, n)))
 
 def reflection(u, n):
     '''
-    
     Given the incident unit vector u, normal unit vector n that defines 
     the orientation of the boundary between two media, return the unit 
     vector in the direction of the reflected ray.  
     
     Arguments
     ---------
-    u:    Unit vector in direction of incident a ray (or an numpy array 
-	  of unit vectors)
+    u:    Unit vector in direction of incident a ray (or a numpy array 
+	      of unit vectors)
     n:    Unit normal to boundary (or an numpy array of unit normals)
     
     Return
     ------
     ur:   Unit vector in direction of reflected ray (or a numpy array 
-	  thereof)
+	      thereof)
     
     Example
     -------
     
     ur = reflection(u, n)
-
     '''
     udotn = dot(u, n)
     try:
@@ -123,8 +120,8 @@ def transmission(u, n, n1, n2):
     
     Arguments
     ---------
-    u:    unit vector in direction of incident ray (or an numpy array of 
-	  unit vectors)
+    u:    unit vector in the direction of the incident ray (or an 
+          numpy array of unit vectors)
     n:    unit normal to boundary (or an numpy array of unit normals)
     n1:   refractive index of medium traversed by incident ray
     n2:   refractive index of medium traversed by transmitted (i.e., 
@@ -132,14 +129,13 @@ def transmission(u, n, n1, n2):
     
     Return
     ------
-    ut:   unit vector in direction of transmitted ray (or a numpy array 
-	  thereof)
+    ut:   unit vector in direction of transmitted ray 
+          (or a numpy array thereof)
     
     Example
     -------
     
     ut = transmission(u, n, n1, n2)
-    
     '''
     
     # n x u x n
@@ -171,27 +167,36 @@ def transmission(u, n, n1, n2):
 def line_sphere_intersect(c, u, a, o):
     '''
     
-    Given a line defined by the point c and unit vector u, compute the points of intersection
-    with a sphere of radius a located at point o.
+    Given a line defined by the point c and unit vector u, 
+    compute the points of intersection with a sphere of radius a 
+    located at point o.
     
     Arguments
     ---------
     c :   a point on the incident ray (or a numpy array of vectors)
-    u :   a unit vector in the direction of the incident ray (or a numpy array of vectors)
+    u :   a unit vector in the direction of the incident ray 
+          (or a numpy array of vectors)
     a :   the radius of the sphere
-    o :   the location of center of the sphere (i.e., the center of curvature)
+    o :   the location of center of the sphere 
+          (i.e., the center of curvature)
     
     Return
     ------
-    p1, p2, crosses : p1 and p2 are the intersection points, with p1 the closer of the two points to
-    point c and crosses are an array of booleans. If True, the line crosses the sphere.
+    p1, p2, crosses : p1 and p2 are the intersection points, with p1 
+    the closer of the two points to point c and crosses are an array 
+    of booleans. If True, the line crosses the sphere.
     
     Example
     -------
     
     p1, p2, crosses = line_sphere_intersect(C, U, R, O)
-    
     '''
+    if not isinstance(o, np.ndarray):
+        raise TypeError(f'''
+    The position vector of the center of the sphere must be
+    a numpy array not of type {type(o)}
+        ''')
+
     C  = c - o
     cc = dot(C, C)
     uc = dot(u, C)
@@ -212,11 +217,13 @@ def line_sphere_intersect(c, u, a, o):
     
     l1 =-uc + q
     l2 =-uc - q
-    
+
+    # First order intersection points according
+    # value of l1 and l2 such that 
     lmin = np.where(l1 < l2, l1, l2)
     r1 = lmin * u + c
     
     lmax = np.where(l1 < l2, l2, l1)
     r2 = lmax * u + c
-    
+
     return r1, r2, crosses

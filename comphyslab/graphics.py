@@ -28,28 +28,30 @@ SKYBLUE   = vp.vector(0.62,0.57,0.98)
 LAWNGREEN = vp.vector(0.50,0.90,0.50)
 GRAY      = vp.vector(0.70,0.70,0.70)
 
-WIDTH  = 600 # viewport width in pixels
+WIDTH  = 500 # viewport width in pixels
 HEIGHT = 300 # viewport height in pixels
 
 ORIGIN = vp.vector(0,0,0)
 I      = vp.vector(1,0,0) # unit vector in x direction
 J      = vp.vector(0,1,0) # unit vector in y direction
 K      = vp.vector(0,0,1) # unit vector in z direction
-CAMERA = vp.vector(3,5,10).norm() # Camera position (to be scaled)
 # ---------------------------------------------------------------------
 # FUNCTIONS
 # ---------------------------------------------------------------------
-def create_canvas(caption, size):
+def create_canvas(caption, size, up=J):
     scene = vp.canvas()
     scene.caption = caption
-    #scene.range = size      # visible size in world coordinates [-size, size]
     scene.width = WIDTH
     scene.height= HEIGHT
+    scene.align = 'left'
     scene.background=SKYBLUE
     scene.userzoom = False            # disable vpython zoom; do our own
-    scene.up = J                      # direction of vertical
-    
-    r_camera = 2 * size * CAMERA
+    scene.up = up                     # direction of vertical
+
+    if up == J:
+        r_camera = 2 * size * vp.vector(3,5,10).norm()
+    else:
+        r_camera = 2 * size * vp.vector(10,3,5).norm()
     scene.camera.axis =-r_camera
     scene.camera.pos  = r_camera
     scene.camera.dist = r_camera.mag
@@ -68,18 +70,11 @@ def create_zoom(scene):
                            length=0.7*scene.width, bind=zoom_callback)
     return zoom
 
-def draw_coordinate_system(size):
+def draw_coordinate_system(size, draw_plane=True, up=J):
     axes = NS()
     sw = size/80
     aw = size/2
-    
-    # draw ground
-    a = vp.vertex( pos= size*I+size*K, color=LAWNGREEN, opacity=0.5)
-    b = vp.vertex( pos= size*I-size*K, color=LAWNGREEN, opacity=0.5)
-    c = vp.vertex( pos=-size*I-size*K, color=LAWNGREEN, opacity=0.5)
-    d = vp.vertex( pos=-size*I+size*K, color=LAWNGREEN, opacity=0.5)
-    axes.xzplane = vp.quad(vs=[a, b, c, d])
-    
+
     # draw Cartesian axes 
     axes.xaxis = vp.arrow(pos=ORIGIN, axis=size*I, shaftwidth=sw, color=GRAY)
     axes.xlabel= vp.label(pos=aw*I, text='x', box=False) 
@@ -89,7 +84,20 @@ def draw_coordinate_system(size):
     
     axes.zaxis = vp.arrow(pos=ORIGIN, axis=size*K, shaftwidth=sw, color=GRAY)
     axes.zlabel= vp.label(pos=aw*K, text='z', box=False) 
-
+        
+    if draw_plane:
+        if up == J:
+            n = I
+            m = K
+        else:
+            n = J
+            m = I
+        a = vp.vertex(pos= size*n+size*m, color=LAWNGREEN, opacity=0.5)
+        b = vp.vertex(pos= size*n-size*m, color=LAWNGREEN, opacity=0.5)
+        c = vp.vertex(pos=-size*n-size*m, color=LAWNGREEN, opacity=0.5)
+        d = vp.vertex(pos=-size*n+size*m, color=LAWNGREEN, opacity=0.5)
+        axes.ground = vp.quad(vs=[a, b, c, d])
+        
     return axes
 
 def plot_central_xy_axes(ax, 
@@ -132,18 +140,27 @@ def plot_central_xy_axes(ax,
 # ---------------------------------------------------------------------
 # Simple class to store state and widgets
 class Bag(NS):
-    def __init__(self):
+    def __init__(self, verbose=False):
         super().__init__()
         self.gfx = NS() # widgets stored in this "bag"
+        self.verbose = verbose
         
     def clear(self):
-        # clear all references to rendered 3D objects.
+        # free all graphics objects
+        for key, obj in self.gfx.__dict__.items():
+            try:
+                obj.delete()
+                if self.verbose:
+                    print(f'\tdeleted: {key}')
+            except:
+                pass
+        # clear all references to graphics objects.
         self.gfx.__dict__.clear()
         
 class Sim:
     def __init__(self, context, update, 
                  stopped_message='Animation ended!', 
-                 wait_before_delete=3):
+                 wait_before_delete=5):
 
         # verify context
         try:
@@ -189,9 +206,9 @@ class Sim:
 
         print(self.message)
         sleep(self.wait_before_delete)
-        
-        self.context.gfx.scene.delete() # free all graphics objects
-        self.context.clear()            # free all Python references to graphics objects
+
+        # free all graphics objects
+        self.context.clear()
         
 class Controls:
     def __init__(self, context):
@@ -216,4 +233,59 @@ class Controls:
         r_camera = scene.camera.dist * CAMERA
         scene.camera.axis =-r_camera
         scene.camera.pos  = r_camera
-       
+
+class Histogram:
+    def __init__(self, title, xtitle, ytitle, xmin, xmax, 
+                 nbins=50, 
+                 color=vp.color.blue, 
+                 density=True, 
+                 width=400, 
+                 height=HEIGHT, 
+                 align='right', fast=True):
+
+        self.xmin    = xmin
+        self.xmax    = xmax
+        self.nbins   = nbins
+        self.density = density
+        self.delta   = (xmax-xmin)/nbins
+        
+        self.edges   = np.linspace(xmin, xmax, nbins + 1)
+        self.centers = (self.edges[:-1] + self.edges[1:])/2
+        self.counts  = np.zeros(nbins, dtype=int)
+
+        self.g = vp.graph(
+            title=title, xtitle=xtitle, ytitle=ytitle,
+            xmin=xmin, xmax=xmax, 
+            align=align, width=width, height=height,
+            fast=fast) # draw simpler graph for speed
+        
+        # bar width ~ bin width
+        self.bars = vp.gvbars(graph=self.g, 
+                              delta=self.delta, 
+                              color=color)
+
+    def __del__(self):
+        self.bars.delete()
+        self.g.delete()
+
+    def delete(self):
+        self.__del__()
+        
+    def fill(self, x):
+        # Find bin index
+        II = np.floor((x-self.xmin) / self.delta).astype(np.int32)
+        II = II[(0 <= II) * (II < self.nbins)]
+
+        # Update counts 
+        self.counts[:] = self.counts + np.bincount(II, minlength=len(self.counts))
+        
+    def clear(self):
+        self.counts.fill(0)
+        
+    def draw(self):
+        # update bar data
+        if self.density:
+            A = 1.0/self.counts.sum()
+        else:
+            A = 1.0
+        self.bars.data = list(zip(self.centers, A*self.counts))
