@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from types import SimpleNamespace as NS
 from time import sleep
+from comphyslab.utils import CircularBuffer
 # ---------------------------------------------------------------------
 # update fonts
 FONTSIZE = 12
@@ -238,7 +239,8 @@ class Histogram:
     def __init__(self, title, xtitle, ytitle, xmin, xmax, 
                  nbins=50, 
                  color=vp.color.blue, 
-                 density=True, 
+                 density=True,
+                 buffer_size=-1,
                  width=400, 
                  height=HEIGHT, 
                  align='right', fast=True):
@@ -252,7 +254,7 @@ class Histogram:
         self.edges   = np.linspace(xmin, xmax, nbins + 1)
         self.centers = (self.edges[:-1] + self.edges[1:])/2
         self.counts  = np.zeros(nbins, dtype=int)
-
+        
         self.g = vp.graph(
             title=title, xtitle=xtitle, ytitle=ytitle,
             xmin=xmin, xmax=xmax, 
@@ -264,6 +266,11 @@ class Histogram:
                               delta=self.delta, 
                               color=color)
 
+        if buffer_size > 0:
+            self.buffer = CircularBuffer(buffer_size, nbins)
+        else:
+            self.buffer = None
+        
     def __del__(self):
         self.bars.delete()
         self.g.delete()
@@ -276,9 +283,17 @@ class Histogram:
         II = np.floor((x-self.xmin) / self.delta).astype(np.int32)
         II = II[(0 <= II) * (II < self.nbins)]
 
-        # Update counts 
-        self.counts[:] = self.counts + np.bincount(II, minlength=len(self.counts))
+        # Update counts
+        newcounts = np.bincount(II, minlength=len(self.counts))
         
+        if type(self.buffer) != type(None):
+            self.buffer.append(newcounts)
+            oldest_counts = self.buffer.get_oldest()
+            if type(oldest_counts) != type(None):
+                self.counts[:] = self.counts - oldest_counts
+                
+        self.counts[:] = self.counts + newcounts
+
     def clear(self):
         self.counts.fill(0)
         

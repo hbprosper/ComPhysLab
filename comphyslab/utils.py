@@ -29,6 +29,27 @@ def elapsed_time(now, start):
     etime_str = "%2.2d:%2.2d:%2.2d" % (hours, minutes, seconds)
     return etime_str, etime, (hours, minutes, seconds)
 # ---------------------------------------------------------------------------
+class CircularBuffer: # Help from ChatGPT 5.2
+    def __init__(self, L, n):
+        self.L, self.n = L, n
+        self.data = np.zeros((L, n))
+        self.idx = 0
+        self.count = 0   # number of valid elements
+
+    def append(self, row):
+        self.data[self.idx] = row
+        self.idx = (self.idx + 1) % self.L
+        self.count = min(self.count + 1, self.L)
+
+    def get_k_behind(self, k):
+        if k >= self.count:
+            return None
+        pos = (self.idx - 1 - k) % self.L
+        return self.data[pos]
+
+    def get_oldest(self):
+        return self.get_k_behind(self.L - 1)
+# ---------------------------------------------------------------------------
 class Missing:
     pass
 MISSING = Missing()
