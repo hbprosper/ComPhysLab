@@ -18,6 +18,23 @@ except:
     ''')
 
 import yaml
+import math
+# ----------------------------------------------------------------------------
+def round_sig(x, sig=5):    # ChatGPT 5.2
+    if x == 0:
+        return 0.0
+    return round(x, sig - int(math.floor(math.log10(abs(x)))) - 1)
+# ----------------------------------------------------------------------------   
+def round_sig_np(x, sig=5):
+    x = np.asarray(x, dtype=float)
+    out = np.zeros_like(x)
+
+    nz = x != 0
+    mags = np.floor(np.log10(np.abs(x[nz]))).astype(int)
+    decimals = sig - mags - 1
+
+    out[nz] = np.round(x[nz], decimals)
+    return out
 # ----------------------------------------------------------------------------
 def elapsed_time(now, start):
     etime = now() - start    
@@ -30,25 +47,25 @@ def elapsed_time(now, start):
     return etime_str, etime, (hours, minutes, seconds)
 # ---------------------------------------------------------------------------
 class CircularBuffer: # Help from ChatGPT 5.2
-    def __init__(self, L, n):
-        self.L, self.n = L, n
-        self.data = np.zeros((L, n))
+    def __init__(self, size, n):
+        self.size, self.n = size, n
+        self.data = np.zeros((size, n))
         self.idx = 0
         self.count = 0   # number of valid elements
 
     def append(self, row):
         self.data[self.idx] = row
-        self.idx = (self.idx + 1) % self.L
-        self.count = min(self.count + 1, self.L)
+        self.idx = (self.idx + 1) % self.size
+        self.count = min(self.count + 1, self.size)
 
     def get_k_behind(self, k):
         if k >= self.count:
             return None
-        pos = (self.idx - 1 - k) % self.L
+        pos = (self.idx - 1 - k) % self.size
         return self.data[pos]
 
     def get_oldest(self):
-        return self.get_k_behind(self.L - 1)
+        return self.get_k_behind(self.size - 1)
 # ---------------------------------------------------------------------------
 class Missing:
     pass
