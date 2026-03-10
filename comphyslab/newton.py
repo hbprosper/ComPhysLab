@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from scipy.stats import qmc
 from scipy.spatial import cKDTree
+
+from comphyslab.vectors import magnitude, unit, dot
+from comphyslab.utils import Bag, round_sig
 # ----------------------------------------------------------------------
 # update fonts
 FONTSIZE = 12
@@ -30,8 +33,8 @@ mp.rc('animation', html='jshtml')
 # ----------------------------------------------------------------------
 # CONSTANTS
 # ----------------------------------------------------------------------
-G = 6.674080e-11               # Gravitational constant (m^3 /kg /s^2)
-KB = 1.380_649e-23             # Boltzmann constant (J/K)
+G  = 6.674080e-11              # Gravitational constant (m^3 /kg /s^2)
+KB = 1.380649e-23              # Boltzmann constant (J/K)
 
 Msun     = 1.98850e30          # Mass of Sun (kg)
 Mmercury = 0.33010e24          # Mass of Mercury (kg)
@@ -44,10 +47,10 @@ Rsun     = 6.957e8             # Radius of Sun (m)
 Rearth   = 6.371e6             # Radius of Earth (m)
 
 # Conversion factors
-DAY2SECS = 24*3600.0          # Seconds per Earth day
-YEAR2SECS= 365.25*DAY2SECS    # Seconds per Earth year
-AU2METERS= 1.495979e+11       # Astronomical unit (m)
-DEG2RAD  = np.pi / 180        # need to convert angles to radians
+DAY2SECS = 24*3600.0           # Seconds per Earth day
+YEAR2SECS= 365.25*DAY2SECS     # Seconds per Earth year
+AU2METERS= 1.495979e+11        # Astronomical unit (m)
+DEG2RAD  = np.pi / 180         # need to convert angles to radians
 DAY = DAY2SECS
 YEAR= YEAR2SECS
 AU  = AU2METERS
@@ -56,45 +59,43 @@ AU  = AU2METERS
 # ----------------------------------------------------------------------
 # Gravity
 #------------------------------
+def v_central_G(r):
+    return -1.0 / r            # 1/r
+    
 def f_central_G(r):
-    inv_r1 = 1.0 / rs          # 1/r
+    inv_r1 = 1.0 / r           # 1/r
     return inv_r1**2           # 1/r^2
     
 def g_central_G(r):
-    inv_r1 = 1.0 / rs          # 1/r
+    inv_r1 = 1.0 / r           # 1/r
     return -2.0 * inv_r1**3    # 1/r^3
     
-Gravity = (f_central_G, g_central_G) 
+Gravity = (v_central_G, f_central_G, g_central_G) 
 #-------------------------------
 # Lennard-Jones Force
 #-------------------------------
-def f_central_LJ(r, R=np.inf):
-    mask = r < R
-    rs = r[mask]
-    
-    inv_r1  = 1.0 / rs    # 1/r
+def v_central_LJ(r): 
+    inv_r1  = 1.0 / r     # 1/r
     inv_r2  = inv_r1**2   # 1/r^2
     inv_r6  = inv_r2**3   # 1/r^6
     inv_r12 = inv_r6**2   # 1/r^12
-
-    out = np.zeros_like(r)
-    out[mask] = 24.0 * inv_r1 * (2 * inv_r12 - inv_r6)
-    return out
+    return 4.0 * (inv_r12 - inv_r6)
     
-def g_central_LJ(r, R=np.inf):
-    mask = r < R
-    rs = r[mask]
-    
-    inv_r1  = 1.0 / rs    # 1/r
+def f_central_LJ(r): 
+    inv_r1  = 1.0 / r     # 1/r
     inv_r2  = inv_r1**2   # 1/r^2
     inv_r6  = inv_r2**3   # 1/r^6
     inv_r12 = inv_r6**2   # 1/r^12
+    return 24.0 * inv_r1 * (2 * inv_r12 - inv_r6)
     
-    out = np.zeros_like(r)
-    out[mask] = 24.0 * inv_r2 * (-26.0 * inv_r12 + 7.0 * inv_r6)
-    return out
+def g_central_LJ(r):
+    inv_r1  = 1.0 / r     # 1/r
+    inv_r2  = inv_r1**2   # 1/r^2
+    inv_r6  = inv_r2**3   # 1/r^6
+    inv_r12 = inv_r6**2   # 1/r^12
+    return 24.0 * inv_r2 * (-26.0 * inv_r12 + 7.0 * inv_r6)
 
-TLennardJones = (f_central_LJ, g_central_LJ)
+TLennardJones = (v_central_LJ, f_central_LJ, g_central_LJ)
 # ---------------------------------------------------------------------- 
 # Given a central force law, compute the net force per unit mass field 
 # at each particle. Code tidied up and corrected by ChatGPT 5.2.
@@ -119,7 +120,7 @@ def compute_net_force_field(k, q, m, r, law, L=-1.0, eps=1e-16):
           
       Then particle acceleration is (q_i/m_i) * sum_j f_ij.
     """
-    f_central = law[0]                       # f(r)
+    v_central, f_central, _ = law            # f(r)
 
     # Pairwise relative vectors: rij[i,j] = r_i - r_j
     rij = r[:, None, :] - r[None, :, :]      # (n,n,3)
@@ -152,7 +153,11 @@ def compute_net_force_field(k, q, m, r, law, L=-1.0, eps=1e-16):
     qm = (q / m)[:, None]                    # (n,1)
     f_net = qm * E                           # (n,3)
 
-    return f_net
+    # Potential energy
+    V = v_central(rmag)                      # (n,n), should give 0 on diag
+    qq = q[:, None] * q[None, :]
+    U = 0.5 * np.sum(k * qq * V)
+    return f_net, U
 
 def predictor_order3(r, v, f, h):
     h2 = h*h
@@ -186,13 +191,13 @@ def propagate_order3(k, q, m, r, v, law, h, L=-1.0):
     # Evaluate at tn
     rn = r
     vn = v
-    fn = compute_net_force_field(k, q, m, rn, law, L=L)
+    fn, U = compute_net_force_field(k, q, m, rn, law, L=L)
 
     # Predict positions and velocities
     r_star, v_star = predictor_order3(rn, vn, fn, h)
 
-    # Evaluate field using predicted positions at tn+1 = tn + h
-    f_star = compute_net_force_field(k, q, m, r_star, law, L=L)
+    # Evaluate field at predicted positions at tn+1 = tn + h
+    f_star, _ = compute_net_force_field(k, q, m, r_star, law, L=L)
 
     # Correct velocity
     vn1 = vn + 0.5*h*(fn + f_star)                     # O(h^3)
@@ -205,13 +210,13 @@ def propagate_order3(k, q, m, r, v, law, h, L=-1.0):
     if L > 0:
         rn1 = (rn1 + 0.5*L) % L - 0.5*L
 
-    return rn1, vn1
+    return rn1, vn1, U
 
 FCC = np.array([
-        [0, 0, 0],
-        [0.5, 0.5, 0],
-        [0.5, 0, 0.5],
-        [0, 0.5, 0.5]
+        [0.0, 0.0, 0.0],
+        [0.5, 0.5, 0.0],
+        [0.5, 0.0, 0.5],
+        [0.0, 0.5, 0.5]
     ])
 
 CUBIC = np.array([
@@ -221,7 +226,7 @@ CUBIC = np.array([
         [0.0, 0.0, 0.5]
     ])
 
-def initialize_lattice(n_cells, basis, full=False, eps=1.e-3):
+def initialize_lattice(n_cells, basis, full=False, eps=1.e-6):
     """
     Build lattice in the unit box.
     
@@ -234,8 +239,8 @@ def initialize_lattice(n_cells, basis, full=False, eps=1.e-3):
     # Build lattice
     a = 1.0 / n_cells  # FCC lattice constant
 
-    lmin = -eps*a
-    lmax =  eps*a + 1.0
+    lmin =-eps
+    lmax = eps + 1.0
 
     n = 1 if full else 0
     
@@ -326,7 +331,8 @@ def pairwise_separations(r, L=-1):
 def min_separation(r, L=None):
     """
     r: (n,3) array
-    L: None  If scalar L, assumes cubic box [0,L) (or centered; doesn't matter for distances).
+    L: None  If scalar L, assumes cubic box [0,L) (or centered; 
+       doesn't matter for distances).
     Returns: minimum pair distance (float)
     """
     tree = cKDTree(r, boxsize=L)  # boxsize enables periodic distances
@@ -468,7 +474,7 @@ def compute_acceleration_and_jerk_fields(k, q, m, r, v, law, L=-1.0, eps=1e-16):
           
       Then particle acceleration is (q_i/m_i) * sum_j f_ij.
     """
-    f_central, g_central = law               # f(r), df/dr
+    v_central, f_central, g_central = law    # V(r), f(r), df/dr
 
     # Pairwise relative vectors: rij[i,j] = r_i - r_j
     rij = r[:, None, :] - r[None, :, :]      # (n,n,3)
@@ -514,7 +520,12 @@ def compute_acceleration_and_jerk_fields(k, q, m, r, v, law, L=-1.0, eps=1e-16):
     f_net = qm * E                           # (n,3)
     j_net = qm * J                           # (n,3)
 
-    return f_net, j_net
+    # Potential energy
+    V = v_central(rmag)                      # (n,n), should give 0 on diag
+    qq = q[:, None] * q[None, :]
+    U = 0.5 * np.sum(k * qq * V)
+    
+    return f_net, j_net, U
 
 def predictor4(r, v, f, j, h):
     h2 = h*h
@@ -548,14 +559,14 @@ def propagate_order4(k, q, m, r, v, law, h, L=-1.0):
     # Evaluate at tn
     rn = r
     vn = v
-    fn, jn = compute_acceleration_and_jerk_fields(
+    fn, jn, U = compute_acceleration_and_jerk_fields(
         k, q, m, rn, vn, law, L=L)
 
     # Predict
     r_star, v_star = predictor4(rn, vn, fn, jn, h)
 
     # Evaluate at predicted positions at tn+h
-    f_star, j_star = compute_acceleration_and_jerk_fields(
+    f_star, j_star, _ = compute_acceleration_and_jerk_fields(
         k, q, m, r_star, v_star, law, L=L)
 
     h2 = h*h
@@ -571,76 +582,12 @@ def propagate_order4(k, q, m, r, v, law, h, L=-1.0):
     if L > 0:
         r_np1 = (r_np1 + 0.5*L) % L - 0.5*L
 
-    return r_np1, v_np1
+    return r_np1, v_np1, U
 # ----------------------------------------------------------------------
 class Missing:
     pass
 MISSING = Missing()
 
-class MDLoggerH5:
-    def __init__(self, filename, N, dt, R, rho,
-                 save_every=10, dtype=np.float32):
-        self.f = h5py.File(filename, "w")
-        self.N = int(N)
-        self.dt = float(dt)
-        self.R = float(R)
-        self.rho = float(rho)
-        self.save_every = int(save_every)
-        self.dtype = dtype
-
-        # --- metadata ---
-        self.f.attrs["N"] = self.N
-        self.f.attrs["dt"] = self.dt
-        self.f.attrs["R"] = self.R
-        self.f.attrs["rho"] = self.rho
-        self.f.attrs["units"] = "LJ_reduced (m=kB=sigma=epsilon=1)"
-        self.f.attrs["save_every"] = self.save_every
-
-        # chunk a few frames at a time
-        chunk_t = 16
-
-        self.f.create_dataset(
-            "r", shape=(0, self.N, 3), maxshape=(None, self.N, 3),
-            dtype=dtype, chunks=(chunk_t, self.N, 3),
-            compression="gzip",
-            compression_opts=4,
-            shuffle=True,  # arrange bytes so that identical bytes are adjacent
-            scaleoffset=4  # 4 sig figs after decimal point
-        )
-        self.f.create_dataset(
-            "v", shape=(0, self.N, 3), maxshape=(None, self.N, 3),
-            dtype=dtype, chunks=(chunk_t, self.N, 3),
-            compression="gzip",
-            compression_opts=4,
-            shuffle=True, 
-            scaleoffset=4
-        )
-        # impulse accumulated over the save interval (10 steps)
-        self.f.create_dataset(
-            "impulse", shape=(0,), maxshape=(None,),
-            dtype=dtype, chunks=(4096,),
-            compression="gzip",
-            compression_opts=4,
-            shuffle=True,     
-            scaleoffset=4
-        )
-
-    def append(self, r, v, impulse):
-        i = self.f["r"].shape[0]
-        self.f["r"].resize(i + 1, axis=0)
-        self.f["v"].resize(i + 1, axis=0)
-        self.f["impulse"].resize(i + 1, axis=0)
-
-        self.f["r"][i] = r.astype(self.dtype, copy=False)
-        self.f["v"][i] = v.astype(self.dtype, copy=False)
-        self.f["impulse"][i] = np.asarray(impulse, dtype=self.dtype)
-
-    def flush(self):
-        self.f.flush()
-
-    def close(self):
-        self.f.close()
-        
 class CentralForceSolver:
     '''
     solver = CentralForceSolver(k, q, m, r, v, law, h, nsteps)
@@ -660,9 +607,136 @@ class CentralForceSolver:
         R = []
         V = []
         for _ in range(self.nsteps):
-            r, v = propagate_order3(
+            r, v, U = propagate_order3(
                 self.k, self.q, self.m, self.r, self.v, self.law, self.h)
             R.append(r)
             V.append(v)
         return np.array(R), np.array(V)
+# ---------------------------------------------------------------------- 
+# Argon parameters
+# ---------------------------------------------------------------------- 
+def argon_initial_state(rho, T):   
+    sigma   = 3.4e-10                 # Distance at which potential is zero (m)
+    epsilon = 1.657e-21               # Characteristic energy (J)
+    mass    = 6.69e-26                # Mass of argon atom (kg)
+    equi_sep= 2**(1/6)                # Equilibrium separation (sigma)
+    vc = float(np.sqrt(epsilon/mass)) # Characteristic speed (m/s)
+    tc = float(sigma / vc)            # Characteristic timescale (s)
+
+    # Save in a bag
+    bg = Bag()
+    bg.sigma   = round_sig(sigma)
+    bg.epsilon = round_sig(epsilon)
+    bg.mass    = round_sig(mass)
+    bg.equi_sep= round_sig(equi_sep)
+    bg.vc      = round_sig(vc)
+    bg.tc      = round_sig(tc)
+    bg.T2K     = round_sig(mass * vc**2 / KB)
+
+    print(f'''
+    sigma:       {bg.sigma:10.2e} m
+    epsilon:     {bg.epsilon:10.2e} J
+    mass:        {bg.mass:10.2e} kg
+    speed scale: {bg.vc:5.2f} m/s
+    time scale:  {bg.tc:10.2e} s
+    ''')
+
+    # -------------------------------------------------------
+    # Compute number density (units atoms/sigma**3)
+    # -------------------------------------------------------
+    print(f'requested number density: {rho:10.3e} kg/m^3')
+    
+    rho = rho / mass           # number of atoms/m^3
+    print(f'requested number density: {rho:10.3e} atoms/m^3')
+    
+    rho = rho * sigma**3       # number of atoms/sigma**3
+    bg.rho = round_sig(rho)
+    print(f'requested number density: {rho:10.3e} atoms/sigma^3')
+
+    bg.T = round_sig(T)
+    print(f'requested temperature:    {T:6.3f} K\n')
+    # -------------------------------------------------------
+    # Particles
+    # -------------------------------------------------------    
+    # Create a lattice of points that fit within a sphere
+    # such that 1) the points are as far apart as possible and
+    # 2) the average particle density equals the requested
+    # density.
+    # -------------------------------------------------------
+    # Step 1. Create a unit cube of lattice points centered at the
+    # origin.
+    ncells = 4
+    r  = initialize_fcc(ncells, full=True) 
+
+    # Step 2: Scale the unit cube of lattice points by the 
+    # length "L" so that the average point density is 2*rho.
+    N1 = len(r)
+    V1 = N1/(2*rho)
+    L  = V1**(1/3)
+    r *= L
+    print(f'number of lattice points generated: {N1}\n')
+
+    # Step 3: Keep those lattice points that lie within 
+    # a sphere of radius L/sqrt(2)
+    rmag = magnitude(r)
+    bg.r = r[rmag < L/np.sqrt(2)]
+    bg.N = len(bg.r)
+   
+    # Step 4: Compute radius of the circumscribing sphere such 
+    # that the particle density equals the requested density.
+    R = (3*bg.N/rho/4/np.pi)**(1/3)    
+    bg.R = R
+    print(f'number atoms:   {bg.N:5d} atoms     (container radius, R = {bg.R:6.3f} sigma)')
+
+    # Sanity check!
+    V = (4/3)*np.pi*R**3
+    bg.rho = bg.N / V
+    print(f'number density:    {bg.rho:10.3e}/sigma^3')
+
+    rmin_sep = round_sig(min_separation(bg.r))
+    bg.rmin_sep = rmin_sep
+    print(
+        f'min(separation):   {rmin_sep:6.3f} sigma '\
+        f'(cf. {equi_sep:6.3f} sigma)\n')
+
+    # -------------------------------------------------------
+    # Generate initial velocities
+    # -------------------------------------------------------
+    vrms1 = np.sqrt(3*KB*T/mass)
+    v = vrms1 * unit(np.random.uniform(-1.0, 1.0, 3*bg.N).reshape(bg.N, 3))
+    
+    # Remove center of mass motion and rescale velocities 
+    # to arrive at specified temperature, defined as
+    # T = (1/3)(m/KB) <v^2>
+    if (len(v.shape) > 1) and (v.shape[0] > 1):
+        v -= v.mean(axis=0)
+    vrms2 = np.sqrt(np.mean((v**2).sum(axis=-1)))
+    v *= vrms1 / vrms2
+    bg.v = v
+    
+    # Check that we get the requested temperature
+    vrms = float(np.sqrt(np.mean((v**2).sum(axis=-1))))
+    T = (1/3)*(mass/KB)*vrms**2
+    print(f'Vrms:  {vrms:5.1f} m/s,\tT: {T:8.2f} K')
+
+    # Compute dimensionless velocities and dimensionless
+    # temperature
+    v /= vc
+    vrms /= vc
+    T_reduced = float(np.mean((v**2).sum(axis=-1)) / 3)
+    print(f'Vrms:  {vrms:5.1f} vc,\tT: {T_reduced:8.2f}')
+    bg.vrms = round_sig(vrms)
+
+    # Reserve buffers (used in update)
+    bg.r0 = np.zeros_like(bg.r)
+    bg.v0 = np.zeros_like(bg.v)
+
+    bg.m  = np.ones(bg.N)      # Masses of particles (units of mass)
+    bg.q  = np.ones(bg.N)      # Masses of atoms (units of mass)
+    # --------------------------------------------
+    # Force
+    # --------------------------------------------
+    bg.k = 1.0
+    bg.law = TLennardJones
+    return bg
 # ----------------------------------------------------------------------    

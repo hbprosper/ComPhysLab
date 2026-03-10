@@ -6,9 +6,8 @@ import matplotlib.pyplot as plt
 import subprocess
 
 from matplotlib.animation import FuncAnimation
-from types import SimpleNamespace as NS
 from time import sleep
-from comphyslab.utils import CircularBuffer
+from comphyslab.utils import CircularBuffer, Bag
 # ---------------------------------------------------------------------
 # update fonts
 FONTSIZE = 12
@@ -85,7 +84,7 @@ def Zoom(scene):
 create_zoom = Zoom
 
 def CoordinateSystem(size, draw_plane=True, up=J):
-    axes = NS()
+    axes = Bag()
     sw = size/80
     aw = size/2
 
@@ -186,25 +185,6 @@ def plot_planet_positions(x, y, colors, text,
     plt.savefig(filename)
 # ---------------------------------------------------------------------
 # CLASSES
-# ---------------------------------------------------------------------
-# Simple class to store state and widgets
-class Bag(NS):
-    def __init__(self, verbose=False):
-        super().__init__()
-        self.gfx = NS() # widgets stored in this "bag"
-        self.verbose = verbose
-        
-    def clear(self):
-        # free all graphics objects
-        for key, obj in self.gfx.__dict__.items():
-            try:
-                obj.delete()
-                if self.verbose:
-                    print(f'\tdeleted: {key}')
-            except:
-                pass
-        # clear all references to graphics objects.
-        self.gfx.__dict__.clear()
 
 def start_movie_export(scene, height=200, folder="frames"):
     """
@@ -436,7 +416,7 @@ class Histogram:
             self.buffer.append(newcounts)
             oldest_counts = self.buffer.get_oldest()
             if type(oldest_counts) != type(None):
-                self.counts[:] = np.maximum(self.counts - oldest_counts, 0)
+                self.counts[:] = np.clip(self.counts - oldest_counts, 0, None)
             self.counts += newcounts
         else:      
             self.counts[:] = newcounts
