@@ -119,69 +119,105 @@ class CircularBuffer: # Help from ChatGPT 5.2
         return self.get_k_behind(self.size - 1)
 # ---------------------------------------------------------------------------
 class SimLogger:
-    def __init__(self, filename, bg, 
-                 other_attrs=[], 
-                 other_datasets=[], 
+    '''
+    Log simulation data to an HDF5 (H5) file. 
+
+    Arguments:
+    
+        filename (str):     Name of H5 file.
+        
+        bag (Bag):          Bag containing attributes and datasets to save.
+                            An attribute is a single instance of an item.
+                            A dataset comprises a sequence of items, saved
+                            with the write method.
+                        
+        attributes (list):  List specifying attributes from the bag to be
+                            saved to the H5 file. 
+
+        datasets (list):    List specifying datasets from the bag to be
+                            saved to the H5 file using the write function.
+
+        save_every (int):   Save dataset items every "save_every" times that
+                            the write function is called. Default=10.
+
+        flush_every (int):  Flush dataset items to file "flush_every" times that
+                            the write function is called. Default=500.
+
+    '''
+    def __init__(self, filename, bag, attributes, datasets, 
+                 save_every=10,
+                 flush_every=500,
                  chunk=16,
-                 debug=False):
+                 debug=False, 
+                 delete_old_file=True):
 
         self.filename = filename
-        self.chunk = chunk
+        if delete_old_file:
+            os.system(f'rm -rf {filename}')
+        elif sys.path.exists(filename):
+            raise RuntimeError(f'''
+    File {filename} already exists. Either rename it or delete it!
+            ''')
+
+        self.chunk   = chunk
         self.funtype = re.compile('float|int|bool|str')
         self.alltype = re.compile('float|int|bool|str|array')
         self.getnptype= re.compile("'.*'")
         self.ftype = np.float32
         self.itype = np.int32
-        self.debug = debug
+        self.debug = debug 
         
+        self.attributes = attributes
+        self.datasets   = datasets
+        
+        # Data are saved every "save_every" calls to write
+        self.save_every  = save_every
+
+        # Data are flushed to "disk" every "flush_every" calls to write
+        self.flush_every = flush_every
+
+        # Index of saved dataset element. This increments every
+        # time an item is saved.
+        self.index = 0
+
+        # Loop index. This increments every time the 
+        # write method is called.
+        self.loop_index = 0
+
         # Open file
         self.f = h5py.File(filename, "w")
-
-        # Required items
-        for key in ['N', 'dt', 'save_every']:
-            obj = bg.get(key)
+        
+        # Attributes to be saved
+        for key in self.attributes:
+            obj = bag.get(key)
             if obj is None:
-                raise RuntimeError(f"bag object missing required item '{key}'")
-            # The required item exists in bag
-            self.__register_item(key, obj, which='attribute')
-
-        for key in ['r', 'v']:
-            obj = bg.get(key)
-            if obj is None:
-                raise RuntimeError(f"bag object missing required item '{key}'")
-            # The required item exists in bag
-            self.__register_item(key, obj, which='dataset')
-
-        # Other items
-        for key in other_attrs:
-            obj = bg.get(key)
-            if obj is None:
-                raise RuntimeError(f"bag object missing requested item '{key}'")
+                raise RuntimeError(f"bag object missing item '{key}'")
 
             # The current item exists in bag
             self.__register_item(key, obj, which='attribute')
 
-        for key in other_datasets:
-            obj = bg.get(key)
+        self.__register_item('save_every', save_every, which='attribute')
+
+        for key in self.datasets:
+            obj = bag.get(key)
             if obj is None:
-                raise RuntimeError(f"bag object missing requested item '{key}'")
+                raise RuntimeError(f"bag object missing item '{key}'")
 
             # The current item exists in bag
             self.__register_item(key, obj, which='dataset')
 
-    def write(self, r, v, **extra): 
-        
-        i = self.f["r"].shape[0]
-        
-        self.f["r"].resize(i + 1, axis=0)
-        self.f["r"][i] = r.astype(self.ftype, copy=False)
-        
-        self.f["v"].resize(i + 1, axis=0)
-        self.f["v"][i] = v.astype(self.ftype, copy=False)
-
-        for key, value in extra.items():
-            self.f[key].resize(i + 1, axis=0)
-            self.f[key][i] = np.asarray(value, dtype=self.ftype)
+    def write(self, bg):
+        if self.loop_index % self.save_every == 0:
+            for key in self.datasets:
+                obj = bg.get(key)
+                self.f[key].resize(self.index + 1, axis=0)
+                self.f[key][self.index] = np.asarray(obj, dtype=self.ftype)    
+            self.index += 1
+            
+        if self.loop_index % self.flush_every == 0:
+            self.flush()
+            
+        self.loop_index += 1
 
     def flush(self):
         self.f.flush()
@@ -294,78 +330,58 @@ def request(f, key, where="dataset", crash=True):
             print(f"{filename} does not contain requested {where} '{key}'")
             return None
 # -------------------------------------------------------------------------- 
-class SimReader: # With a bit of help from ChatGPT 5.2
+class SimReader:
     """
     Read simulation data from an HDF5 (H5) file. 
 
     Arguments:
     
         filename (str): Name of H5 file.
-        other (list):   Optional list specifying which additional items 
+        items (list):   Optional list specifying which items 
                         to read from file. Default: read everything.
-
-    Required content of H5 file:
-        N:     number of particles
-        r:     particle positions, shape  (K, N, 3)
-        v:     particle velocities, shape (K, N, 3)
-        dt:    time step in simulation calculations
-        save_every: number of time steps per saved frame such that the
-               time stamp of frame "i" is t = i * dt.
     """
-    def __init__(self, filename, other=[]):
+    def __init__(self, filename, items=[]):
 
         self.filename = filename
         self.getnptype= re.compile("'.*'")
         
         self.f = h5py.File(filename, "r")
-        
-        # Required content
-        self.N  = require(self.f, 'N', 'attribute')
-        self.dt = require(self.f, 'dt','attribute')
-        self.save_every = require(self.f, 'save_every', 'attribute')
-        
-        self.r  = require(self.f, 'r', 'dataset')
-        self.v  = require(self.f, 'v', 'dataset')
-        
-        self.max_frames = self.r.shape[0]
-                    
-        # Map to keep track of attributes
-        self.attrs = {'N':self.N, 
-                      'dt':self.dt, 
-                      'save_every':self.save_every, 
-                      'max_frames':self.max_frames}
-
-        # Maps to keep track of other attributes/datasets
-        # If list "other" given, use it for list of other
-        # attributes and/or datasets to read, otherwise read
-        # everything.
+                            
+        # Determine items to read
         attributes = list(self.f.attrs.keys())  # attributes
         datasets   = list(self.f.keys())        # datasets/groups
-        if len(other) == 0:
-            other = attributes + datasets
-            
+        if len(items) == 0:
+            items = attributes  + datasets
+
+        # Maps to keep track of attributes/datasets
+        self.attrs = {}
         self.datasets = {}
-        for item in other:
+        
+        for item in items:
             if item in attributes:
                 cmd = f'self.{item} = request(self.f, "{item}", "attribute")'
                 exec(cmd)
                 self.attrs[item] = eval(f'self.{item}')
                 
             elif item in datasets:
-                if item in ['r', 'v']: 
-                    continue
                 cmd = f'self.{item} = request(self.f, "{item}", "dataset")'
                 exec(cmd)
                 self.datasets[item] = eval(f'self.{item}')
             else:
                 raise KeyError(f'''
-    In file {filename}, the requested item {item} not found!
+    In file {filename}, the item {item} not found!
                 ''')
-        self.has_other_datasets = len(self.datasets) > 0
-        
-        # Compute time interval between saved frames
-        self.Dt = self.dt * self.save_every
+        try:
+            # Compute time interval between saved frames
+            self.Dt = self.dt * self.save_every
+        except:
+            self.Dt = 1.0
 
+        try:
+            self.max_frames = len(self.r)
+        except:
+            self.max_frames = -1
+            
     def header(self):
         bg = Bag()
         for key, value in self.attrs.items():
@@ -374,17 +390,11 @@ class SimReader: # With a bit of help from ChatGPT 5.2
         return bg
         
     def read(self, i):
-        if len(self.datasets) > 0:
-            bg = Bag() 
-            for key, obj in self.datasets.items():
-                bg.set(key, obj[i].astype(np.float32, copy=True))
-            return i * self.Dt, \
-            self.r[i].astype(np.float32, copy=True), \
-            self.v[i].astype(np.float32, copy=True), bg
-        else:
-            return i * self.Dt, \
-            self.r[i].astype(np.float32, copy=True), \
-            self.v[i].astype(np.float32, copy=True), None
+        bg = Bag()
+        bg.t = i * self.Dt
+        for key, obj in self.datasets.items():
+            bg.set(key, obj[i].astype(np.float32, copy=True))
+        return bg
 
     def close(self):
         self.f.close()

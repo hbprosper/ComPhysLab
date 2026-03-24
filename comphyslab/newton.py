@@ -615,7 +615,7 @@ class CentralForceSolver:
 # ---------------------------------------------------------------------- 
 # Argon parameters
 # ---------------------------------------------------------------------- 
-def argon_initial_state(rho, T):   
+def argon_initial_state(rho, T, ncells=4, debug=False):   
     sigma   = 3.4e-10                 # Distance at which potential is zero (m)
     epsilon = 1.657e-21               # Characteristic energy (J)
     mass    = 6.69e-26                # Mass of argon atom (kg)
@@ -632,29 +632,23 @@ def argon_initial_state(rho, T):
     bg.vc      = round_sig(vc)
     bg.tc      = round_sig(tc)
     bg.T2K     = round_sig(mass * vc**2 / KB)
-
-    print(f'''
-    sigma:       {bg.sigma:10.2e} m
-    epsilon:     {bg.epsilon:10.2e} J
-    mass:        {bg.mass:10.2e} kg
-    speed scale: {bg.vc:5.2f} m/s
-    time scale:  {bg.tc:10.2e} s
-    ''')
-
+    bg.T       = T
+    
     # -------------------------------------------------------
     # Compute number density (units atoms/sigma**3)
     # -------------------------------------------------------
-    print(f'requested number density: {rho:10.3e} kg/m^3')
+    if debug:
+        print('Argon Initial State\n')
+        print(f'requested mass density:   {rho:10.3e} kg/m^3')
     
     rho = rho / mass           # number of atoms/m^3
-    print(f'requested number density: {rho:10.3e} atoms/m^3')
+    if debug:
+        print(f'requested number density: {rho:10.3e} atoms/m^3')
     
     rho = rho * sigma**3       # number of atoms/sigma**3
     bg.rho = round_sig(rho)
-    print(f'requested number density: {rho:10.3e} atoms/sigma^3')
-
-    bg.T = round_sig(T)
-    print(f'requested temperature:    {T:6.3f} K\n')
+    if debug:
+        print(f'requested number density: {rho:10.3e} atoms/sigma^3')
     # -------------------------------------------------------
     # Particles
     # -------------------------------------------------------    
@@ -665,7 +659,6 @@ def argon_initial_state(rho, T):
     # -------------------------------------------------------
     # Step 1. Create a unit cube of lattice points centered at the
     # origin.
-    ncells = 4
     r  = initialize_fcc(ncells, full=True) 
 
     # Step 2: Scale the unit cube of lattice points by the 
@@ -674,7 +667,8 @@ def argon_initial_state(rho, T):
     V1 = N1/(2*rho)
     L  = V1**(1/3)
     r *= L
-    print(f'number of lattice points generated: {N1}\n')
+    if debug:
+        print(f'number of lattice points generated: {N1}\n')
 
     # Step 3: Keep those lattice points that lie within 
     # a sphere of radius L/sqrt(2)
@@ -686,19 +680,19 @@ def argon_initial_state(rho, T):
     # that the particle density equals the requested density.
     R = (3*bg.N/rho/4/np.pi)**(1/3)    
     bg.R = R
-    print(f'number atoms:   {bg.N:5d} atoms     (container radius, R = {bg.R:6.3f} sigma)')
+    R_nm = bg.R * sigma * 1e9
+    if debug:
+        print(f'''
+        number atoms:     {bg.N:5d} atoms     
+        container radius: {bg.R:6.3f} sigma [{R_nm:6.3f} nm]
+        ''')
 
     # Sanity check!
     V = (4/3)*np.pi*R**3
     bg.rho = bg.N / V
-    print(f'number density:    {bg.rho:10.3e}/sigma^3')
 
     rmin_sep = round_sig(min_separation(bg.r))
     bg.rmin_sep = rmin_sep
-    print(
-        f'min(separation):   {rmin_sep:6.3f} sigma '\
-        f'(cf. {equi_sep:6.3f} sigma)\n')
-
     # -------------------------------------------------------
     # Generate initial velocities
     # -------------------------------------------------------
@@ -717,14 +711,16 @@ def argon_initial_state(rho, T):
     # Check that we get the requested temperature
     vrms = float(np.sqrt(np.mean((v**2).sum(axis=-1))))
     T = (1/3)*(mass/KB)*vrms**2
-    print(f'Vrms:  {vrms:5.1f} m/s,\tT: {T:8.2f} K')
+    if debug:
+        print(f'Vrms:  {vrms:5.1f} m/s,\tT: {T:8.2f} K')
 
     # Compute dimensionless velocities and dimensionless
     # temperature
     v /= vc
     vrms /= vc
     T_reduced = float(np.mean((v**2).sum(axis=-1)) / 3)
-    print(f'Vrms:  {vrms:5.1f} vc,\tT: {T_reduced:8.2f}')
+    if debug:
+        print(f'Vrms:  {vrms:5.1f} vc,\tT: {T_reduced:8.2f}')
     bg.vrms = round_sig(vrms)
 
     # Reserve buffers (used in update)
@@ -738,5 +734,100 @@ def argon_initial_state(rho, T):
     # --------------------------------------------
     bg.k = 1.0
     bg.law = TLennardJones
+
+    bg.dt = 1.0e-3 # in units of tc
+    bg.impulse = 0.0
+    bg.U = 0.0
+    
+    print(f'''
+--------------------------------------------------------------------------
+Attributes (saved once)
+--------------------------------------------------------------------------
+  mass:     {bg.mass:10.3e} \tMass of argon atom (kg)
+  epsilon:  {bg.epsilon:10.3e} \tCharacteristic energy (J)
+  tc:       {bg.tc:10.3e} \tCharacteristic time scale (s)
+  vc:       {bg.vc:10.3e} \tCharacteristic speed (m/s)
+  sigma:    {bg.sigma:10.3e} \tCharacteristic distance scale (m)
+  equi_sep: {bg.equi_sep:10.3e} \tEquilibrium separation (sigma)
+  
+  rho:      {bg.rho:10.3e} \tNumber of atoms/sigma^3
+  T:        {bg.T:10.3e} \tAbsolute temperature (K)
+
+  N:        {bg.N:10d} \tNumber of atoms in container
+  R:        {bg.R:10.3e} \tRadius of container (sigma)
+  rmin_sep: {bg.rmin_sep:10.3e} \tMinimum atomic separation (sigma)
+  
+  dt:       {bg.dt:10.3e} \tSimulation time step (tc)
+--------------------------------------------------------------------------
+Datasets (saved periodically)
+--------------------------------------------------------------------------
+  r: \t\t\tInitial position of atoms   (N,3)
+  v: \t\t\tInitial velocities of atoms (N,3)
+  impulse:  {bg.impulse:10.3e} \tMomentum change imparted to container wall
+  U:        {bg.U:10.3e} \tPotential energy
+'''
+         )
     return bg
+# ---------------------------------------------------------------------- 
+def argon_phase_diagram(): # Written by Gemini, modified by HBP    
+    # Argon Constants
+    T_triple       =   83.8  # K
+    rho_triple_liq = 1417.0  # kg/m^3
+    rho_triple_sol = 1623.0  # kg/m^3
+    T_critical     =  150.7  # K
+    rho_critical   =  536.0  # kg/m^3
+    
+    # --- Data for Coexistence Curves ---
+    # 1. Liquid-Gas Dome
+    t_lg = np.linspace(T_triple, T_critical, 100)
+    density_diff = (rho_triple_liq - rho_critical) * \
+    (1 - (t_lg - T_triple) / (T_critical - T_triple))**0.32
+    rho_gas = rho_critical - density_diff
+    rho_liq = rho_critical + density_diff
+    
+    # 2. Solid-Liquid Boundary (Starting from triple point)
+    t_melt = np.linspace(T_triple, 160, 100)
+    rho_solid_melt = 1623 + 2.5 * (t_melt - T_triple) 
+    rho_liquid_melt = 1417 + 3.0 * (t_melt - T_triple)
+    
+    # --- Plotting ---
+    plt.figure(figsize=(8, 4.5))
+    
+    # Shaded Regions
+    plt.fill_betweenx(t_melt, 0, rho_solid_melt, 
+                      color='lightgray', label='Solid')
+    plt.fill_betweenx(t_lg, rho_liq, 2000, 
+                      color='lightsalmon', alpha=0.3, label='Liquid')
+    plt.fill_betweenx(t_melt, rho_liquid_melt, 2000, 
+                      color='lightsalmon', alpha=0.3)
+    plt.fill_betweenx(t_lg, 0, rho_gas, color='aliceblue', label='Gas')
+    plt.fill_betweenx(t_lg, rho_gas, rho_liq, 
+                      color='skyblue', alpha=0.5, label='L-G Coexistence')
+    
+    # Plot Boundaries
+    plt.plot(rho_gas, t_lg, color='blue', linewidth=2)
+    plt.plot(rho_liq, t_lg, color='red', linewidth=2)
+    plt.plot(rho_solid_melt, t_melt, color='black', 
+             linewidth=2, label='Solid-Liquid Boundary')
+    
+    # Add Triple Point
+    plt.plot(rho_triple_liq, T_triple, 'ko', markersize=8, zorder=5)
+    plt.text(rho_triple_liq - 500, T_triple + 4, 
+             'Triple Point\n(83.8K, 1417kg/m³)', verticalalignment='center')
+    
+    # Add Critical Point
+    plt.plot(rho_critical, T_critical, 'ko', markersize=8, zorder=5)
+    plt.text(rho_critical + 50, T_critical+4, 
+             'Critical Point\n(150.7K, 536kg/m³)', verticalalignment='center')
+    
+    # Axis Limits and Labels
+    plt.xlim(0, 2000)
+    plt.ylim(80, 160)
+    plt.xlabel(r'Density ($\rho$) [kg/m$^3$]')
+    plt.ylabel('Temperature (T) [K]')
+    plt.title(r'Argon Phase Diagram (T-$\rho$)')
+    plt.legend(loc='upper right')
+    plt.grid(True, linestyle='--', alpha=0.3)
+    
+    plt.show()
 # ----------------------------------------------------------------------    
