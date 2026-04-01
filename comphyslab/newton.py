@@ -98,7 +98,7 @@ def g_central_LJ(r):
 TLennardJones = (v_central_LJ, f_central_LJ, g_central_LJ)
 # ---------------------------------------------------------------------- 
 # Given a central force law, compute the net force per unit mass field 
-# at each particle. Code tidied up and corrected by ChatGPT 5.2.
+# at each particle. Code tidied up and corrected by GPT 5.2.
 # ----------------------------------------------------------------------
 def compute_net_force_field(k, q, m, r, law, L=-1.0, eps=1e-16):
     """
@@ -349,7 +349,7 @@ def maxwell_distribution(T, vmin, vmax, nbins=50):
     beta = 1/T
     b  = 4*np.pi*np.sqrt((beta/2/np.pi)**3)
     v  = np.linspace(vmin, vmax, nbins+1)
-    v  = 0.5*(v[:-1] + v[1:])
+    v  = 0.5*(v[1:]+v[:-1])
     vv = v*v
     y  = b * vv * np.exp(-beta * vv/2) * dv
     return y, v
@@ -761,10 +761,10 @@ Attributes (saved once)
 --------------------------------------------------------------------------
 Datasets (saved periodically)
 --------------------------------------------------------------------------
-  r: \t\t\tInitial position of atoms   (N,3)
-  v: \t\t\tInitial velocities of atoms (N,3)
+  r: \t\t\tPositions of atoms   (N,3)
+  v: \t\t\tVelocities of atoms  (N,3)
   impulse:  {bg.impulse:10.3e} \tMomentum change imparted to container wall
-  U:        {bg.U:10.3e} \tPotential energy
+  U:        {bg.U:10.3e} \tPotential energy of system of atoms
 '''
          )
     return bg

@@ -168,6 +168,22 @@ def plot_planet_positions(x, y, colors, text,
     nxticks = nyticks = 9
     xlabel  = '$x$ (au)'
     ylabel  = '$y$ (au)'
+    
+    ax.set_facecolor('black')
+    # Axis tick marks and labels
+    ax.tick_params(colors='white')
+    
+    # Axis spine lines (the box border)
+    for spine in ax.spines.values():
+        spine.set_edgecolor('white')
+    
+    # Axis labels
+    ax.xaxis.label.set_color('white')
+    ax.yaxis.label.set_color('white')
+    
+    # Title
+    ax.title.set_color('white')
+    
     plot_central_xy_axes(ax, 
                       xmin, xmax, nxticks, xlabel,
                       ymin, ymax, nyticks, ylabel, 
@@ -178,8 +194,8 @@ def plot_planet_positions(x, y, colors, text,
     for X, Y, T in zip(x, y, text):
         X += 0.1
         Y += 0.1
-        ax.text(X, Y, T)
-    
+        txt = ax.text(X, Y, T, color='white')
+        
     fig.tight_layout()
     
     plt.savefig(filename)
